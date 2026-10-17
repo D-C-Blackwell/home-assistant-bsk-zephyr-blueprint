@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0
+
+- Added optional weekly Schedule helper support
+- Added per-block power, fan mode and fan speed
+- Added cycle, extract and intake schedule modes
+- Added night, low, medium and high schedule speeds
+- Added optional home occupancy handling
+- Added configurable low-humidity operation at home and while away
+
 ## 1.0.1
 
 - Made the backup humidity sensor optional

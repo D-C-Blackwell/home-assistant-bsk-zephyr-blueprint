@@ -2,10 +2,10 @@ blueprint:
   name: BSK Zephyr Schedule, Humidity Boost and Window Control
   description: >-
     Controls a BSK Zephyr ventilation unit through its Home Assistant power,
-    fan mode and fan speed entities. Runs cycle mode on a daily day/night
-    schedule, switches to extract/high after sustained humidity, and optionally
-    powers the unit off while any selected window is open. An optional second
-    humidity sensor can be used when the primary sensor is unavailable.
+    fan mode and fan speed entities. Supports a simple day/night schedule or
+    an optional weekly Schedule helper with per-block power, mode and speed.
+    Humidity can override the schedule, occupancy can reduce ventilation while
+    nobody is home, and optional window contacts can stop the unit.
   domain: automation
   author: D. C. Blackwell
   source_url: https://github.com/D-C-Blackwell/home-assistant-bsk-zephyr-blueprint/blob/main/blueprints/automation/dc_blackwell/bsk_zephyr_schedule_humidity_window.yaml
@@ -25,6 +25,7 @@ blueprint:
       selector:
         entity:
           domain: select
+
     primary_humidity_sensor:
       name: Primary humidity sensor
       description: >-
@@ -45,26 +46,6 @@ blueprint:
         entity:
           domain: sensor
           device_class: humidity
-    window_sensors:
-      name: Window contacts
-      description: >-
-        Optional. The BSK is powered off while any selected contact is open.
-        Leave empty to disable window control.
-      default: []
-      selector:
-        entity:
-          domain: binary_sensor
-          multiple: true
-    night_start:
-      name: Night speed starts
-      default: "22:00:00"
-      selector:
-        time:
-    day_start:
-      name: Day speed starts
-      default: "07:00:00"
-      selector:
-        time:
     boost_humidity:
       name: Extract boost starts at
       default: 60
@@ -100,28 +81,181 @@ blueprint:
         seconds: 0
       selector:
         duration:
+    home_low_humidity_action:
+      name: Normal operation at home
+      description: >-
+        Operation used while humidity is below the boost range and somebody is
+        home. Schedule uses the advanced weekly schedule when configured, or
+        the simple day/night schedule otherwise.
+      default: schedule
+      selector:
+        select:
+          options:
+            - label: Follow schedule
+              value: schedule
+            - label: Power off
+              value: "off"
+            - label: Cycle mode at night speed
+              value: night
+
+    advanced_schedule:
+      name: Weekly Schedule helper (optional)
+      description: >-
+        Optional Home Assistant Schedule helper. Each active block can provide
+        additional data named fan_mode, fan_speed and power. Leave empty to
+        use the simple day/night schedule below.
+      default: ""
+      selector:
+        entity:
+          domain: schedule
+    schedule_inactive_action:
+      name: When the weekly schedule is inactive
+      default: simple
+      selector:
+        select:
+          options:
+            - label: Use the simple day/night schedule
+              value: simple
+            - label: Power off
+              value: "off"
+            - label: Cycle mode at night speed
+              value: night
+    night_start:
+      name: Simple schedule night speed starts
+      default: "22:00:00"
+      selector:
+        time:
+    day_start:
+      name: Simple schedule day speed starts
+      default: "07:00:00"
+      selector:
+        time:
+
+    occupancy_entity:
+      name: Home occupancy entity (optional)
+      description: >-
+        Optional entity whose off, not_home, away or numeric zero state means
+        nobody is home. A person group, occupancy binary sensor or home zone
+        entity can be used.
+      default: ""
+      selector:
+        entity:
+    away_low_humidity_action:
+      name: Operation while nobody is home
+      description: >-
+        Humidity boost still starts the unit in extract/high. This option is
+        used when nobody is home and humidity is below the boost range.
+      default: "off"
+      selector:
+        select:
+          options:
+            - label: Power off
+              value: "off"
+            - label: Cycle mode at night speed
+              value: night
+    window_sensors:
+      name: Window contacts
+      description: >-
+        Optional. The BSK is powered off while any selected contact is open or
+        unavailable. Leave empty to disable window control.
+      default: []
+      selector:
+        entity:
+          domain: binary_sensor
+          multiple: true
 
 trigger_variables:
   primary_humidity_entity: !input primary_humidity_sensor
   fallback_humidity_entity: !input fallback_humidity_sensor
+  occupancy_trigger_entity: !input occupancy_entity
+  weekly_schedule_trigger_entity: !input advanced_schedule
   boost_level: !input boost_humidity
   recovery_level: !input recovery_humidity
 
 triggers:
   - at: !input night_start
+    id: schedule_change
     trigger: time
   - at: !input day_start
+    id: schedule_change
     trigger: time
-  - minutes: /15
+  - minutes: /1
+    id: periodic_check
     trigger: time_pattern
   - entity_id: !input window_sensors
+    id: window_change
     trigger: state
   - entity_id:
       - !input power_switch
       - !input fan_mode_select
       - !input fan_speed_select
     from: unavailable
+    id: device_available
     trigger: state
+  - value_template: >-
+      {{ occupancy_trigger_entity and
+         states(occupancy_trigger_entity) in ['off', 'not_home', 'away', '0'] }}
+    id: occupancy_change
+    trigger: template
+  - value_template: >-
+      {{ occupancy_trigger_entity and
+         states(occupancy_trigger_entity) not in ['off', 'not_home', 'away', '0'] }}
+    id: occupancy_change
+    trigger: template
+  - value_template: >-
+      {{ weekly_schedule_trigger_entity and
+         is_state(weekly_schedule_trigger_entity, 'off') }}
+    id: schedule_change
+    trigger: template
+  - value_template: >-
+      {{ weekly_schedule_trigger_entity and
+         is_state(weekly_schedule_trigger_entity, 'on') and
+         state_attr(weekly_schedule_trigger_entity, 'fan_mode') == 'cycle' }}
+    id: schedule_change
+    trigger: template
+  - value_template: >-
+      {{ weekly_schedule_trigger_entity and
+         is_state(weekly_schedule_trigger_entity, 'on') and
+         state_attr(weekly_schedule_trigger_entity, 'fan_mode') == 'extract' }}
+    id: schedule_change
+    trigger: template
+  - value_template: >-
+      {{ weekly_schedule_trigger_entity and
+         is_state(weekly_schedule_trigger_entity, 'on') and
+         state_attr(weekly_schedule_trigger_entity, 'fan_mode') == 'intake' }}
+    id: schedule_change
+    trigger: template
+  - value_template: >-
+      {{ weekly_schedule_trigger_entity and
+         is_state(weekly_schedule_trigger_entity, 'on') and
+         state_attr(weekly_schedule_trigger_entity, 'fan_speed') == 'night' }}
+    id: schedule_change
+    trigger: template
+  - value_template: >-
+      {{ weekly_schedule_trigger_entity and
+         is_state(weekly_schedule_trigger_entity, 'on') and
+         state_attr(weekly_schedule_trigger_entity, 'fan_speed') == 'low' }}
+    id: schedule_change
+    trigger: template
+  - value_template: >-
+      {{ weekly_schedule_trigger_entity and
+         is_state(weekly_schedule_trigger_entity, 'on') and
+         state_attr(weekly_schedule_trigger_entity, 'fan_speed') == 'medium' }}
+    id: schedule_change
+    trigger: template
+  - value_template: >-
+      {{ weekly_schedule_trigger_entity and
+         is_state(weekly_schedule_trigger_entity, 'on') and
+         state_attr(weekly_schedule_trigger_entity, 'fan_speed') == 'high' }}
+    id: schedule_change
+    trigger: template
+  - value_template: >-
+      {{ weekly_schedule_trigger_entity and
+         is_state(weekly_schedule_trigger_entity, 'on') and
+         state_attr(weekly_schedule_trigger_entity, 'power') in
+         [false, 0, '0', 'false', 'off'] }}
+    id: schedule_change
+    trigger: template
   - value_template: >-
       {% set primary = states(primary_humidity_entity) %}
       {% set fallback = states(fallback_humidity_entity)
@@ -130,6 +264,7 @@ triggers:
          else fallback | float(-1) %}
       {{ humidity >= boost_level | float }}
     for: !input boost_delay
+    id: humidity_boost_start
     trigger: template
   - value_template: >-
       {% set primary = states(primary_humidity_entity) %}
@@ -139,8 +274,10 @@ triggers:
          else fallback | float(-1) %}
       {{ humidity >= 0 and humidity <= recovery_level | float }}
     for: !input recovery_delay
+    id: humidity_boost_stop
     trigger: template
   - event: start
+    id: home_assistant_start
     trigger: homeassistant
 
 variables:
@@ -149,6 +286,11 @@ variables:
   fan_mode_entity: !input fan_mode_select
   fan_speed_entity: !input fan_speed_select
   selected_windows: !input window_sensors
+  occupancy_entity_value: !input occupancy_entity
+  weekly_schedule_entity: !input advanced_schedule
+  schedule_inactive_value: !input schedule_inactive_action
+  home_normal_value: !input home_low_humidity_action
+  away_normal_value: !input away_low_humidity_action
   boost_level: !input boost_humidity
   recovery_level: !input recovery_humidity
   night_start_value: !input night_start
@@ -158,20 +300,92 @@ variables:
     {% set fallback = states(fallback_humidity_entity)
        if fallback_humidity_entity else 'unknown' %}
     {{ primary | float if is_number(primary) else fallback | float(-1) }}
-  scheduled_speed: >-
+  simple_speed: >-
     {% set current = now().strftime('%H:%M:%S') %}
     {{ 'night' if current >= night_start_value or current < day_start_value else 'low' }}
+  window_open: >-
+    {{ selected_windows | count > 0 and
+       expand(selected_windows)
+       | rejectattr('state', 'eq', 'off')
+       | list | count > 0 }}
+  nobody_home: >-
+    {% if not occupancy_entity_value %}
+      false
+    {% else %}
+      {% set occupancy = states(occupancy_entity_value) %}
+      {{ occupancy in ['off', 'not_home', 'away', '0'] or
+         (is_number(occupancy) and occupancy | float == 0) }}
+    {% endif %}
+  humidity_boost_active: >-
+    {% set trigger_id = trigger.id | default('') %}
+    {% if trigger_id == 'humidity_boost_start' %}
+      true
+    {% elif trigger_id == 'humidity_boost_stop' %}
+      false
+    {% elif trigger_id == 'schedule_change' %}
+      {{ humidity | float(-1) >= boost_level | float }}
+    {% else %}
+      {{ is_state(fan_mode_entity, 'extract') and
+         is_state(fan_speed_entity, 'high') }}
+    {% endif %}
+  weekly_schedule_active: >-
+    {{ weekly_schedule_entity and is_state(weekly_schedule_entity, 'on') }}
+  weekly_schedule_power: >-
+    {% set value = state_attr(weekly_schedule_entity, 'power')
+       if weekly_schedule_entity else none %}
+    {{ value not in [false, 0, '0', 'false', 'off'] }}
+  weekly_schedule_mode: >-
+    {% set value = state_attr(weekly_schedule_entity, 'fan_mode')
+       if weekly_schedule_entity else none %}
+    {{ value if value in ['cycle', 'extract', 'intake'] else 'cycle' }}
+  weekly_schedule_speed: >-
+    {% set value = state_attr(weekly_schedule_entity, 'fan_speed')
+       if weekly_schedule_entity else none %}
+    {{ value if value in ['night', 'low', 'medium', 'high'] else simple_speed }}
+  desired_profile: >-
+    {% if window_open | bool %}
+      off
+    {% elif humidity_boost_active | bool %}
+      boost
+    {% elif nobody_home | bool %}
+      {{ away_normal_value }}
+    {% elif home_normal_value != 'schedule' %}
+      {{ home_normal_value }}
+    {% elif weekly_schedule_entity %}
+      {% if weekly_schedule_active | bool %}
+        {{ 'weekly' if weekly_schedule_power | bool else 'off' }}
+      {% else %}
+        {{ schedule_inactive_value }}
+      {% endif %}
+    {% else %}
+      simple
+    {% endif %}
+  desired_mode: >-
+    {% if desired_profile == 'boost' %}
+      extract
+    {% elif desired_profile == 'weekly' %}
+      {{ weekly_schedule_mode }}
+    {% else %}
+      cycle
+    {% endif %}
+  desired_speed: >-
+    {% if desired_profile == 'boost' %}
+      high
+    {% elif desired_profile == 'weekly' %}
+      {{ weekly_schedule_speed }}
+    {% elif desired_profile == 'night' %}
+      night
+    {% else %}
+      {{ simple_speed }}
+    {% endif %}
+
 conditions: []
 
 actions:
   - choose:
       - conditions:
           - condition: template
-            value_template: >-
-              {{ selected_windows | count > 0 and
-                 expand(selected_windows)
-                 | rejectattr('state', 'eq', 'off')
-                 | list | count > 0 }}
+            value_template: "{{ desired_profile == 'off' }}"
         sequence:
           - if:
               - condition: state
@@ -181,69 +395,34 @@ actions:
               - target:
                   entity_id: !input power_switch
                 action: switch.turn_off
-      - conditions:
+    default:
+      - if:
+          - condition: state
+            entity_id: !input power_switch
+            state: "off"
+        then:
+          - target:
+              entity_id: !input power_switch
+            action: switch.turn_on
+          - delay: "00:00:10"
+      - if:
           - condition: template
-            value_template: >-
-              {{ selected_windows | count == 0 or
-                 expand(selected_windows)
-                 | rejectattr('state', 'eq', 'off')
-                 | list | count == 0 }}
-        sequence:
-          - if:
-              - condition: state
-                entity_id: !input power_switch
-                state: "off"
-            then:
-              - target:
-                  entity_id: !input power_switch
-                action: switch.turn_on
-              - delay: "00:00:10"
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: >-
-                      {{ humidity | float(-1) >= boost_level | float or
-                         (humidity | float(-1) > recovery_level | float and
-                          is_state(fan_mode_entity, 'extract') and
-                          is_state(fan_speed_entity, 'high')) }}
-                sequence:
-                  - if:
-                      - condition: template
-                        value_template: "{{ not is_state(fan_mode_entity, 'extract') }}"
-                    then:
-                      - target:
-                          entity_id: !input fan_mode_select
-                        data:
-                          option: extract
-                        action: select.select_option
-                  - if:
-                      - condition: template
-                        value_template: "{{ not is_state(fan_speed_entity, 'high') }}"
-                    then:
-                      - target:
-                          entity_id: !input fan_speed_select
-                        data:
-                          option: high
-                        action: select.select_option
-            default:
-              - if:
-                  - condition: template
-                    value_template: "{{ not is_state(fan_mode_entity, 'cycle') }}"
-                then:
-                  - target:
-                      entity_id: !input fan_mode_select
-                    data:
-                      option: cycle
-                    action: select.select_option
-              - if:
-                  - condition: template
-                    value_template: "{{ not is_state(fan_speed_entity, scheduled_speed) }}"
-                then:
-                  - target:
-                      entity_id: !input fan_speed_select
-                    data:
-                      option: "{{ scheduled_speed }}"
-                    action: select.select_option
+            value_template: "{{ not is_state(fan_mode_entity, desired_mode) }}"
+        then:
+          - target:
+              entity_id: !input fan_mode_select
+            data:
+              option: "{{ desired_mode }}"
+            action: select.select_option
+      - if:
+          - condition: template
+            value_template: "{{ not is_state(fan_speed_entity, desired_speed) }}"
+        then:
+          - target:
+              entity_id: !input fan_speed_select
+            data:
+              option: "{{ desired_speed }}"
+            action: select.select_option
 
 mode: restart
 max_exceeded: silent
