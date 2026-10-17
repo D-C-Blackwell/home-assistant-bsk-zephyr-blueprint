@@ -8,7 +8,7 @@ Home Assistant automation blueprint for BSK Zephyr ventilation units exposed by 
 - Low fan speed during the day and night fan speed overnight
 - Humidity boost using extract mode and high fan speed
 - Separate boost and recovery thresholds with configurable delays
-- Primary room humidity sensor with BSK humidity as a fallback
+- Configurable primary humidity sensor with an optional backup sensor
 - Optional window contacts that power the unit off while a window is open
 - Automatic recovery after Home Assistant starts or BSK entities become available
 
@@ -18,7 +18,8 @@ Home Assistant automation blueprint for BSK Zephyr ventilation units exposed by 
 - Power switch entity
 - Fan mode select entity with `cycle` and `extract` options
 - Fan speed select entity with `night`, `low` and `high` options
-- Primary and backup humidity sensors
+- One humidity sensor, either an external room sensor or the BSK sensor
+- Optional second humidity sensor for fallback readings
 - Optional Home Assistant window contact sensors
 
 The blueprint is designed for entities provided by the [BSK Zephyr Home Assistant integration](https://github.com/andersonshatch/hass-bskzephyr).
@@ -37,7 +38,9 @@ After importing it, create an automation from the blueprint and select the match
 
 ## Behaviour
 
-The primary humidity sensor is used whenever it has a numeric reading. The backup sensor is used only when the primary sensor is unavailable.
+Select an external room humidity sensor as primary when one is available. An external sensor usually represents room conditions better than the sensor inside the ventilation unit. The BSK reading can change with fan direction and the air currently moving through the unit.
+
+If no external sensor is available, select the BSK humidity sensor as the primary sensor and leave the backup field empty. If more than one suitable sensor is available, select the preferred room sensor as primary and optionally select another sensor, including the BSK sensor, as backup. The backup is used only when the primary reading is unavailable or not numeric.
 
 Humidity at or above the boost threshold for the configured delay selects `extract` mode and `high` speed. Boost remains active until humidity reaches the recovery threshold for the configured recovery delay.
 

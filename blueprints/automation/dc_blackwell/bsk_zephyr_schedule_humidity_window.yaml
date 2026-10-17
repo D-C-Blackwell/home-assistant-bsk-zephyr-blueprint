@@ -4,8 +4,8 @@ blueprint:
     Controls a BSK Zephyr ventilation unit through its Home Assistant power,
     fan mode and fan speed entities. Runs cycle mode on a daily day/night
     schedule, switches to extract/high after sustained humidity, and optionally
-    powers the unit off while any selected window is open. A second humidity
-    sensor is used only when the primary sensor is unavailable.
+    powers the unit off while any selected window is open. An optional second
+    humidity sensor can be used when the primary sensor is unavailable.
   domain: automation
   author: D. C. Blackwell
   source_url: https://github.com/D-C-Blackwell/home-assistant-bsk-zephyr-blueprint/blob/main/blueprints/automation/dc_blackwell/bsk_zephyr_schedule_humidity_window.yaml
@@ -27,14 +27,20 @@ blueprint:
           domain: select
     primary_humidity_sensor:
       name: Primary humidity sensor
-      description: Room humidity sensor used whenever it is available.
+      description: >-
+        Select an external room humidity sensor when available. Otherwise,
+        select the humidity sensor reported by the BSK unit.
       selector:
         entity:
           domain: sensor
           device_class: humidity
     fallback_humidity_sensor:
-      name: Backup humidity sensor
-      description: Usually the humidity sensor built into the BSK unit.
+      name: Backup humidity sensor (optional)
+      description: >-
+        Optional. Select another humidity sensor to use only when the primary
+        sensor is unavailable. This can be the BSK sensor when an external
+        room sensor is selected as primary.
+      default: ""
       selector:
         entity:
           domain: sensor
@@ -118,7 +124,8 @@ triggers:
     trigger: state
   - value_template: >-
       {% set primary = states(primary_humidity_entity) %}
-      {% set fallback = states(fallback_humidity_entity) %}
+      {% set fallback = states(fallback_humidity_entity)
+         if fallback_humidity_entity else 'unknown' %}
       {% set humidity = primary | float if is_number(primary)
          else fallback | float(-1) %}
       {{ humidity >= boost_level | float }}
@@ -126,7 +133,8 @@ triggers:
     trigger: template
   - value_template: >-
       {% set primary = states(primary_humidity_entity) %}
-      {% set fallback = states(fallback_humidity_entity) %}
+      {% set fallback = states(fallback_humidity_entity)
+         if fallback_humidity_entity else 'unknown' %}
       {% set humidity = primary | float if is_number(primary)
          else fallback | float(-1) %}
       {{ humidity >= 0 and humidity <= recovery_level | float }}
@@ -147,7 +155,8 @@ variables:
   day_start_value: !input day_start
   humidity: >-
     {% set primary = states(primary_humidity_entity) %}
-    {% set fallback = states(fallback_humidity_entity) %}
+    {% set fallback = states(fallback_humidity_entity)
+       if fallback_humidity_entity else 'unknown' %}
     {{ primary | float if is_number(primary) else fallback | float(-1) }}
   scheduled_speed: >-
     {% set current = now().strftime('%H:%M:%S') %}

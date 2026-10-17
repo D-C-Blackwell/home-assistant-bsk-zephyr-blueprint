@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+- Made the backup humidity sensor optional
+- Clarified selection of external and BSK humidity sensors
+
 ## 1.0.0
 
 - Initial release
