@@ -4,6 +4,7 @@
 
 - Made the backup humidity sensor optional
 - Clarified selection of external and BSK humidity sensors
+- Changed the import button and manual link to the raw blueprint URL
 
 ## 1.0.0
 

@@ -26,12 +26,12 @@ The blueprint is designed for entities provided by the [BSK Zephyr Home Assistan
 
 ## Import
 
-[![Open your Home Assistant instance and show the blueprint import dialog with this blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FD-C-Blackwell%2Fhome-assistant-bsk-zephyr-blueprint%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fdc_blackwell%2Fbsk_zephyr_schedule_humidity_window.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with this blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD-C-Blackwell%2Fhome-assistant-bsk-zephyr-blueprint%2Fmain%2Fblueprints%2Fautomation%2Fdc_blackwell%2Fbsk_zephyr_schedule_humidity_window.yaml)
 
 You can also import this URL manually:
 
 ```text
-https://github.com/D-C-Blackwell/home-assistant-bsk-zephyr-blueprint/blob/main/blueprints/automation/dc_blackwell/bsk_zephyr_schedule_humidity_window.yaml
+https://raw.githubusercontent.com/D-C-Blackwell/home-assistant-bsk-zephyr-blueprint/main/blueprints/automation/dc_blackwell/bsk_zephyr_schedule_humidity_window.yaml
 ```
 
 After importing it, create an automation from the blueprint and select the matching entities.
